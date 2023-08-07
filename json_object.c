@@ -53,6 +53,7 @@
 #endif
 #endif
 
+const char *json_number_chars = "0123456789.+-eE"; /* Unused, but part of public API, drop for 1.0 */
 const char *json_hex_chars = "0123456789abcdefABCDEF";
 
 static void json_object_generic_delete(struct json_object *jso);
@@ -1517,6 +1518,12 @@ int json_object_array_add(struct json_object *jso, struct json_object *val)
 {
 	assert(json_object_get_type(jso) == json_type_array);
 	return array_list_add(JC_ARRAY(jso)->c_array, val);
+}
+
+int json_object_array_insert_idx(struct json_object *jso, size_t idx, struct json_object *val)
+{
+	assert(json_object_get_type(jso) == json_type_array);
+	return array_list_insert_idx(JC_ARRAY(jso)->c_array, idx, val);
 }
 
 int json_object_array_put_idx(struct json_object *jso, size_t idx, struct json_object *val)

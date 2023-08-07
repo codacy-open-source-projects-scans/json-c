@@ -88,7 +88,10 @@ option(ENABLE_RDRAND                  "Enable RDRAND Hardware RNG Hash Seed."   
 option(ENABLE_THREADING               "Enable partial threading support."                     OFF)
 option(OVERRIDE_GET_RANDOM_SEED       "Override json_c_get_random_seed() with custom code."   OFF)
 option(DISABLE_EXTRA_LIBS             "Avoid linking against extra libraries, such as libbsd." OFF)
-option(DISABLE_JSON_POINTER           "Disable JSON pointer (RFC6901) support."               OFF)
+option(DISABLE_JSON_POINTER           "Disable JSON pointer (RFC6901) and JSON patch support." OFF)
+option(DISABLE_JSON_PATCH             "Disable JSON patch (RFC6902) support."                 OFF)
+option(NEWLOCALE_NEEDS_FREELOCALE     "Work around newlocale bugs in old FreeBSD by calling freelocale"  OFF)
+option(BUILD_APPS                     "Default to building apps" ON)
 
 
 if (UNIX OR MINGW OR CYGWIN)
@@ -140,11 +143,14 @@ check_include_file(sys/random.h     HAVE_SYS_RANDOM_H)
 check_include_file(sys/stat.h       HAVE_SYS_STAT_H)
 check_include_file(xlocale.h        HAVE_XLOCALE_H)
 
+# Set json-c specific vars to stamp into json_config.h
+# in a way that hopefully won't conflict with other
+# projects that use json-c.
 if (HAVE_INTTYPES_H)
-	# Set a json-c specific var to stamp into json_config.h
-	# in a way that hopefully won't conflict with other
-	# projects that use json-c.
-    set(JSON_C_HAVE_INTTYPES_H 1)
+	set(JSON_C_HAVE_INTTYPES_H 1)
+endif()
+if (HAVE_STDINT_H)
+	set(JSON_C_HAVE_STDINT_H 1)
 endif()
 
 check_symbol_exists(_isnan          "float.h" HAVE_DECL__ISNAN)
@@ -305,6 +311,11 @@ if ("${CMAKE_C_COMPILER_ID}" STREQUAL "GNU" OR "${CMAKE_C_COMPILER_ID}" STREQUAL
     endif()
 
     add_definitions(-D_GNU_SOURCE)
+
+    if ("${CMAKE_C_COMPILER_ID}" STREQUAL "Clang")
+        # Remove this for 1.0 when we can bump the ABI and actually fix these warnings.
+        set(CMAKE_C_FLAGS           "${CMAKE_C_FLAGS} -Wno-shorten-64-to-32")
+    endif()
 elseif ("${CMAKE_C_COMPILER_ID}" STREQUAL "MSVC")
     set(CMAKE_C_FLAGS           "${CMAKE_C_FLAGS} /DEBUG")
     set(CMAKE_C_FLAGS           "${CMAKE_C_FLAGS} /wd4100")
@@ -396,6 +407,7 @@ set(JSON_C_PUBLIC_HEADERS
 set(JSON_C_HEADERS
     ${JSON_C_PUBLIC_HEADERS}
     ${PROJECT_SOURCE_DIR}/json_object_private.h
+    ${PROJECT_SOURCE_DIR}/json_pointer_private.h
     ${PROJECT_SOURCE_DIR}/random_seed.h
     ${PROJECT_SOURCE_DIR}/strerror_override.h
     ${PROJECT_SOURCE_DIR}/math_compat.h
@@ -423,8 +435,15 @@ if (NOT DISABLE_JSON_POINTER)
     set(JSON_C_PUBLIC_HEADERS   ${JSON_C_PUBLIC_HEADERS}  ${PROJECT_SOURCE_DIR}/json_pointer.h)
     set(JSON_C_SOURCES          ${JSON_C_SOURCES}         ${PROJECT_SOURCE_DIR}/json_pointer.c)
     set(JSON_H_JSON_POINTER "#include \"json_pointer.h\"")
+
+    if (NOT DISABLE_JSON_PATCH)
+        set(JSON_C_PUBLIC_HEADERS   ${JSON_C_PUBLIC_HEADERS}  ${PROJECT_SOURCE_DIR}/json_patch.h)
+        set(JSON_C_SOURCES          ${JSON_C_SOURCES}         ${PROJECT_SOURCE_DIR}/json_patch.c)
+	set(JSON_H_JSON_PATCH "#include \"json_patch.h\"")
+    endif()
 else()
     set(JSON_H_JSON_POINTER "")
+    set(JSON_H_JSON_PATCH "")
 endif()
 
 configure_file(json.h.cmakein ${PROJECT_BINARY_DIR}/json.h @ONLY)
@@ -564,7 +583,7 @@ if (CMAKE_PROJECT_NAME STREQUAL PROJECT_NAME AND BUILD_TESTING AND
 add_subdirectory(tests)
 endif()
 
-if (CMAKE_PROJECT_NAME STREQUAL PROJECT_NAME)
+if (CMAKE_PROJECT_NAME STREQUAL PROJECT_NAME AND BUILD_APPS)
 # skip apps when we're included in someone else's build
 if (NOT MSVC)  # cmd line apps don't built on Windows currently.
 add_subdirectory(apps)
