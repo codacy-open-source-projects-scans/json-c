@@ -154,6 +154,9 @@ struct json_tokener *json_tokener_new_ex(int depth)
 {
 	struct json_tokener *tok;
 
+	if (depth < 1)
+		return NULL;
+
 	tok = (struct json_tokener *)calloc(1, sizeof(struct json_tokener));
 	if (!tok)
 		return NULL;
@@ -182,6 +185,8 @@ struct json_tokener *json_tokener_new(void)
 
 void json_tokener_free(struct json_tokener *tok)
 {
+	if (!tok)
+		return;
 	json_tokener_reset(tok);
 	if (tok->pb)
 		printbuf_free(tok->pb);
@@ -678,7 +683,7 @@ struct json_object *json_tokener_parse_ex(struct json_tokener *tok, const char *
 					state = json_tokener_state_string_escape;
 					break;
 				}
-				else if ((tok->flags & JSON_TOKENER_STRICT) && c <= 0x1f)
+				else if ((tok->flags & JSON_TOKENER_STRICT) && (unsigned char)c <= 0x1f)
 				{
 					// Disallow control characters in strict mode
 					tok->err = json_tokener_error_parse_string;
