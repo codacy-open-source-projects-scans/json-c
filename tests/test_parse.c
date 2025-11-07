@@ -113,6 +113,9 @@ static void test_basic_parse(void)
 	single_basic_parse("\"\\udd27\"", 0);
 	// Test with a "short" high surrogate
 	single_basic_parse("[9,'\\uDAD", 0);
+	single_basic_parse("\"[9,'\\uDAD\"", 0);
+	// Test with a supplemental character that looks like a high surrogate
+	single_basic_parse("\"\\uD836\\uDE87\"", 0);
 	single_basic_parse("null", 0);
 	single_basic_parse("NaN", 0);
 	single_basic_parse("-NaN", 0); /* non-sensical, returns null */
@@ -331,6 +334,11 @@ struct incremental_step
     /* Check that json_tokener_reset actually resets */
     {"{ \"foo", -1, -1, json_tokener_continue, 1, 0},
     {": \"bar\"}", -1, 0, json_tokener_error_parse_unexpected, 1, 0},
+
+    /* Check a supplemental code point that looks like a high surrogate */
+    {"\"\\uD836", -1, -1, json_tokener_continue, 0, 0},
+    {"\\uDE87", -1, -1, json_tokener_continue, 0, 0},
+    {"\"", -1, -1, json_tokener_success, 1, 0},
 
     /* Check incremental parsing with trailing characters */
     {"{ \"foo", -1, -1, json_tokener_continue, 0, 0},
@@ -611,6 +619,10 @@ struct incremental_step
       "\x10\x11\x12\x12\x13\x14\x15\x16\x17\x18\x19\x1a\x1b\x1c\x1d\x1e\x1f\"",
       -1, -1, json_tokener_success, 1, 0 },
 
+    { "{\"0\x01\x02\x02\x03\x04\x05\x06\x07\x08\x09\x0a\x0b\x0c\x0d\x0e\x0f" \
+      "\x10\x11\x12\x12\x13\x14\x15\x16\x17\x18\x19\x1a\x1b\x1c\x1d\x1e\x1f\":1}",
+      -1, -1, json_tokener_success, 1, 0 },
+
     // Test control chars again, this time in strict mode, which should fail
     { "\"\x01\"", -1, 1, json_tokener_error_parse_string, 1, JSON_TOKENER_STRICT },
     { "\"\x02\"", -1, 1, json_tokener_error_parse_string, 1, JSON_TOKENER_STRICT },
@@ -643,6 +655,38 @@ struct incremental_step
     { "\"\x1d\"", -1, 1, json_tokener_error_parse_string, 1, JSON_TOKENER_STRICT },
     { "\"\x1e\"", -1, 1, json_tokener_error_parse_string, 1, JSON_TOKENER_STRICT },
     { "\"\x1f\"", -1, 1, json_tokener_error_parse_string, 1, JSON_TOKENER_STRICT },
+
+    { "{\"\x01\":1}", -1, 2, json_tokener_error_parse_string, 1, JSON_TOKENER_STRICT },
+    { "{\"\x02\":1}", -1, 2, json_tokener_error_parse_string, 1, JSON_TOKENER_STRICT },
+    { "{\"\x03\":1}", -1, 2, json_tokener_error_parse_string, 1, JSON_TOKENER_STRICT },
+    { "{\"\x04\":1}", -1, 2, json_tokener_error_parse_string, 1, JSON_TOKENER_STRICT },
+    { "{\"\x05\":1}", -1, 2, json_tokener_error_parse_string, 1, JSON_TOKENER_STRICT },
+    { "{\"\x06\":1}", -1, 2, json_tokener_error_parse_string, 1, JSON_TOKENER_STRICT },
+    { "{\"\x07\":1}", -1, 2, json_tokener_error_parse_string, 1, JSON_TOKENER_STRICT },
+    { "{\"\x08\":1}", -1, 2, json_tokener_error_parse_string, 1, JSON_TOKENER_STRICT },
+    { "{\"\x09\":1}", -1, 2, json_tokener_error_parse_string, 1, JSON_TOKENER_STRICT },
+    { "{\"\x0a\":1}", -1, 2, json_tokener_error_parse_string, 1, JSON_TOKENER_STRICT },
+    { "{\"\x0b\":1}", -1, 2, json_tokener_error_parse_string, 1, JSON_TOKENER_STRICT },
+    { "{\"\x0c\":1}", -1, 2, json_tokener_error_parse_string, 1, JSON_TOKENER_STRICT },
+    { "{\"\x0d\":1}", -1, 2, json_tokener_error_parse_string, 1, JSON_TOKENER_STRICT },
+    { "{\"\x0e\":1}", -1, 2, json_tokener_error_parse_string, 1, JSON_TOKENER_STRICT },
+    { "{\"\x0f\":1}", -1, 2, json_tokener_error_parse_string, 1, JSON_TOKENER_STRICT },
+    { "{\"\x10\":1}", -1, 2, json_tokener_error_parse_string, 1, JSON_TOKENER_STRICT },
+    { "{\"\x11\":1}", -1, 2, json_tokener_error_parse_string, 1, JSON_TOKENER_STRICT },
+    { "{\"\x12\":1}", -1, 2, json_tokener_error_parse_string, 1, JSON_TOKENER_STRICT },
+    { "{\"\x13\":1}", -1, 2, json_tokener_error_parse_string, 1, JSON_TOKENER_STRICT },
+    { "{\"\x14\":1}", -1, 2, json_tokener_error_parse_string, 1, JSON_TOKENER_STRICT },
+    { "{\"\x15\":1}", -1, 2, json_tokener_error_parse_string, 1, JSON_TOKENER_STRICT },
+    { "{\"\x16\":1}", -1, 2, json_tokener_error_parse_string, 1, JSON_TOKENER_STRICT },
+    { "{\"\x17\":1}", -1, 2, json_tokener_error_parse_string, 1, JSON_TOKENER_STRICT },
+    { "{\"\x18\":1}", -1, 2, json_tokener_error_parse_string, 1, JSON_TOKENER_STRICT },
+    { "{\"\x19\":1}", -1, 2, json_tokener_error_parse_string, 1, JSON_TOKENER_STRICT },
+    { "{\"\x1a\":1}", -1, 2, json_tokener_error_parse_string, 1, JSON_TOKENER_STRICT },
+    { "{\"\x1b\":1}", -1, 2, json_tokener_error_parse_string, 1, JSON_TOKENER_STRICT },
+    { "{\"\x1c\":1}", -1, 2, json_tokener_error_parse_string, 1, JSON_TOKENER_STRICT },
+    { "{\"\x1d\":1}", -1, 2, json_tokener_error_parse_string, 1, JSON_TOKENER_STRICT },
+    { "{\"\x1e\":1}", -1, 2, json_tokener_error_parse_string, 1, JSON_TOKENER_STRICT },
+    { "{\"\x1f\":1}", -1, 2, json_tokener_error_parse_string, 1, JSON_TOKENER_STRICT },
 
     {NULL, -1, -1, json_tokener_success, 0, 0},
 };
