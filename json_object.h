@@ -259,13 +259,13 @@ JSON_EXPORT void *json_object_get_userdata(json_object *jso);
  * The user_delete parameter is optional and may be passed as NULL, even if
  * the userdata parameter is non-NULL.  It will be called just before the
  * json_object is deleted, after it's reference count goes to zero
- * (see json_object_put()).
+ * (see json_object_put()) but before any child objects are freed.
  * If this is not provided, it is up to the caller to free the userdata at
  * an appropriate time. (i.e. after the json_object is deleted)
  *
  * Note: Objects created by parsing strings may have custom serializers set
  * which expect the userdata to contain specific data (due to use of
- * json_object_new_double_s()). In this case, json_object_set_serialiser() with
+ * json_object_new_double_s()). In this case, json_object_set_serializer() with
  * NULL as to_string_func should be used instead to set the userdata and reset
  * the serializer to its default value.
  *
@@ -293,7 +293,7 @@ JSON_EXPORT void json_object_set_userdata(json_object *jso, void *userdata,
  * The user_delete parameter is optional and may be passed as NULL, even if
  * the userdata parameter is non-NULL.  It will be called just before the
  * json_object is deleted, after it's reference count goes to zero
- * (see json_object_put()).
+ * (see json_object_put()) but before any child objects are freed.
  * If this is not provided, it is up to the caller to free the userdata at
  * an appropriate time. (i.e. after the json_object is deleted)
  *
@@ -488,7 +488,7 @@ JSON_EXPORT void json_object_object_del(struct json_object *obj, const char *key
  * @param val the local name for the json_object* object variable defined in
  *            the body
  */
-#if defined(__GNUC__) && !defined(__STRICT_ANSI__) && (defined(__STDC_VERSION__) && __STDC_VERSION__ >= 199901L)
+#if defined(__GNUC__) && !defined(__STRICT_ANSI__) && (defined(__cplusplus) || (defined(__STDC_VERSION__) && __STDC_VERSION__ >= 199901L))
 
 #define json_object_object_foreach(obj, key, val)                                \
 	char *key = NULL;                                                        \
@@ -520,7 +520,7 @@ JSON_EXPORT void json_object_object_del(struct json_object *obj, const char *key
 	                 : 0);                                                 \
 	     entry##key = entry_next##key)
 
-#endif /* defined(__GNUC__) && !defined(__STRICT_ANSI__) && (defined(__STDC_VERSION__) && __STDC_VERSION__ >= 199901L) */
+#endif
 
 /** Iterate through all keys and values of an object (ANSI C Safe)
  * @param obj the json_object instance

@@ -21,12 +21,14 @@ set(ALL_TEST_NAMES
     test_charcase
     test_compare
     test_deep_copy
+    test_deep_nesting
     test_double_serializer
     test_float
     test_int_add
     test_int_get
     test_locale
     test_null
+    test_object_add_failure
     test_parse
     test_parse_int64
     test_printbuf
@@ -37,6 +39,11 @@ set(ALL_TEST_NAMES
     test_visit
     test_object_iterator)
 
+set(NOBUILD_TEST_NAMES "")
+if (BUILD_APPS)
+  set(NOBUILD_TEST_NAMES ${NOBUILD_TEST_NAMES} test_json_parse_cli)
+endif()
+
 if (NOT DISABLE_JSON_POINTER)
     set(ALL_TEST_NAMES ${ALL_TEST_NAMES} test_json_pointer)
     set(ALL_TEST_NAMES ${ALL_TEST_NAMES} test_safe_json_pointer_set)
@@ -44,6 +51,10 @@ if (NOT DISABLE_JSON_POINTER)
         set(ALL_TEST_NAMES ${ALL_TEST_NAMES} test_json_patch)
     endif()
 endif()
+
+foreach(TESTNAME ${NOBUILD_TEST_NAMES})
+add_test(NAME ${TESTNAME} COMMAND ${PROJECT_SOURCE_DIR}/tests/${TESTNAME}.test)
+endforeach(TESTNAME)
 
 foreach(TESTNAME ${ALL_TEST_NAMES})
 

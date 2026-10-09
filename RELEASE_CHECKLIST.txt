@@ -75,6 +75,9 @@ library version.  Generally, unless we're doing a major release, change:
 to
 	VERSION x.y+1.z
 
+        Update the version in meson.build (both at the top, and down under
+        '# Build library')
+
     git commit -a -m "Bump version to ${release}"
 
 If we're doing a major release (SONAME bump), also bump the version
@@ -183,6 +186,17 @@ Update checksums on wiki page.
 Copy and paste this output into the wiki page at:
 * https://github.com/json-c/json-c/wiki
 * https://github.com/json-c/json-c/wiki/Old-Releases
+
+------------
+
+Create a release on GitHub
+
+* https://github.com/json-c/json-c/releases
+* Click on "Draft a new release"
+* Choose the appropriate tag
+* Fill in title, refer to the ChangeLog in the release notes
+* Attach the same tarballs as were uploaded to S3
+* When satisfied, click Publish release.
 
 ------------
 

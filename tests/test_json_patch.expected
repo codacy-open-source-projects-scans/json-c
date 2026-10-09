@@ -100,6 +100,8 @@ Testing 'Test the whole document, no match', doc '{ "foo": 1 }' patch '[ { "op":
 Testing 'Empty-string element', doc '{ "": 1 }' patch '[ { "op": "test", "path": "\/", "value": 1 } ]' : OK
 Testing '(null)', doc '{ "foo": [ "bar", "baz" ], "": 0, "a\/b": 1, "c%d": 2, "e^f": 3, "g|h": 4, "i\\j": 5, "k\"l": 6, " ": 7, "m~n": 8 }' patch '[ { "op": "test", "path": "\/foo", "value": [ "bar", "baz" ] }, { "op": "test", "path": "\/foo\/0", "value": "bar" }, { "op": "test", "path": "\/", "value": 0 }, { "op": "test", "path": "\/a~1b", "value": 1 }, { "op": "test", "path": "\/c%d", "value": 2 }, { "op": "test", "path": "\/e^f", "value": 3 }, { "op": "test", "path": "\/g|h", "value": 4 }, { "op": "test", "path": "\/i\\j", "value": 5 }, { "op": "test", "path": "\/k\"l", "value": 6 }, { "op": "test", "path": "\/ ", "value": 7 }, { "op": "test", "path": "\/m~0n", "value": 8 } ]' : OK
 Testing 'Move to same location has no effect', doc '{ "foo": 1 }' patch '[ { "op": "move", "from": "\/foo", "path": "\/foo" } ]' : OK
+Testing 'Move between sibling keys sharing a name prefix is not a parent/child move', doc '{ "aa": 1, "aab": 2 }' patch '[ { "op": "move", "from": "\/aa", "path": "\/aab" } ]' : OK
+Testing 'Copy between sibling keys sharing a name prefix is not a parent/child move', doc '{ "aa": 1, "aab": 2 }' patch '[ { "op": "copy", "from": "\/aa", "path": "\/aab" } ]' : OK
 Testing '(null)', doc '{ "foo": 1, "baz": [ { "qux": "hello" } ] }' patch '[ { "op": "move", "from": "\/foo", "path": "\/bar" } ]' : OK
 Testing '(null)', doc '{ "baz": [ { "qux": "hello" } ], "bar": 1 }' patch '[ { "op": "move", "from": "\/baz\/0\/qux", "path": "\/baz\/1" } ]' : OK
 Testing '(null)', doc '{ "baz": [ { "qux": "hello" } ], "bar": 1 }' patch '[ { "op": "copy", "from": "\/baz\/0", "path": "\/boo" } ]' : OK
@@ -123,7 +125,7 @@ Testing 'test add with bad number should fail', doc '[ "foo", "sil" ]' patch '[ 
 Testing 'missing 'path' parameter', doc '{ }' patch '[ { "op": "add", "value": "bar" } ]' : OK
  => json_patch_apply failed as expected: ERRNO=EINVAL at patch idx 0: Patch object does not contain 'path' field
 Testing ''path' parameter with null value', doc '{ }' patch '[ { "op": "add", "path": null, "value": "bar" } ]' : OK
- => json_patch_apply failed as expected: ERRNO=EINVAL at patch idx 0: Failed to set value at path referenced by 'path' field
+ => json_patch_apply failed as expected: ERRNO=EINVAL at patch idx 0: Patch object 'path' field is not a string
 Testing 'invalid JSON Pointer token', doc '{ }' patch '[ { "op": "add", "path": "foo", "value": "bar" } ]' : OK
  => json_patch_apply failed as expected: ERRNO=EINVAL at patch idx 0: Failed to set value at path referenced by 'path' field
 Testing 'missing 'value' parameter to add', doc '[ 1 ]' patch '[ { "op": "add", "path": "\/-" } ]' : OK
@@ -156,3 +158,10 @@ Testing 'Removing deep nonexistent path', doc '{ "foo": "bar" }' patch '[ { "op"
 Testing 'Removing nonexistent index', doc '[ "foo", "bar" ]' patch '[ { "op": "remove", "path": "\/2" } ]' : OK
  => json_patch_apply failed as expected: ERRNO=ENOENT at patch idx 0: Did not find element referenced by path field
 Testing 'Patch with different capitalisation than doc', doc '{ "foo": "bar" }' patch '[ { "op": "add", "path": "\/FOO", "value": "BAR" } ]' : OK
+Testing 'copy must duplicate the value, not alias it, so no cycle can form', doc '{ "a": { "p": { } } }' patch '[ { "op": "copy", "from": "\/a", "path": "\/b" }, { "op": "copy", "from": "\/b", "path": "\/a\/p\/x" } ]' : OK
+Testing 'null op field must be rejected, not dereferenced', doc '{ "foo": "bar" }' patch '[ { "op": null, "path": "\/foo" } ]' : OK
+ => json_patch_apply failed as expected: ERRNO=EINVAL at patch idx 0: Patch object 'op' field is not a string
+Testing 'null from field must be rejected, not dereferenced', doc '{ "foo": "bar" }' patch '[ { "op": "move", "from": null, "path": "\/foo" } ]' : OK
+ => json_patch_apply failed as expected: ERRNO=EINVAL at patch idx 0: Patch object 'from' field is not a string
+Testing 'null path field must be rejected, not dereferenced', doc '{ "foo": "bar" }' patch '[ { "op": "remove", "path": null } ]' : OK
+ => json_patch_apply failed as expected: ERRNO=EINVAL at patch idx 0: Patch object 'path' field is not a string

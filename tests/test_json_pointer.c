@@ -203,6 +203,10 @@ static void test_wrong_inputs_get(void)
 	assert(0 != json_pointer_get(jo1, "/foo/01", NULL));
 	assert(errno == EINVAL);
 	errno = 0;
+	/* An empty reference token is not a valid array index */
+	assert(0 != json_pointer_get(jo1, "/foo/", NULL));
+	assert(errno == EINVAL);
+	errno = 0;
 	assert(0 != json_pointer_getf(jo1, NULL, "/%s/a", "foo"));
 	assert(errno == EINVAL);
 	errno = 0;
@@ -264,6 +268,25 @@ static void test_example_set(void)
 	printf("PASSED - SET - Final JSON is: %s\n", json_object_get_string(jo1));
 	json_object_put(jo2);
 
+	/* RFC 6901 escapes must be decoded on the set path too, just as the
+	 * getter does, so "/a~1b" addresses the member "a/b" and "/m~0n"
+	 * addresses "m~n" rather than creating keys spelled "a~1b"/"m~0n". */
+	{
+		struct json_object *esc = json_tokener_parse("{ 'a/b': 1, 'm~n': 2 }");
+		struct json_object *v = NULL;
+		assert(0 == json_pointer_set(&esc, "/a~1b", json_object_new_int(11)));
+		assert(0 == json_pointer_setf(&esc, json_object_new_int(22), "/m~0n"));
+		assert(0 == json_pointer_get(esc, "/a~1b", &v));
+		assert(11 == json_object_get_int(v));
+		assert(0 == json_pointer_get(esc, "/m~0n", &v));
+		assert(22 == json_object_get_int(v));
+		assert(NULL == json_object_object_get(esc, "a~1b"));
+		assert(NULL == json_object_object_get(esc, "m~0n"));
+		assert(2 == json_object_object_length(esc));
+		printf("PASSED - SET - escaped keys /a~1b and /m~0n\n");
+		json_object_put(esc);
+	}
+
 	assert(0 == json_pointer_set(&jo1, "", json_object_new_int(10)));
 	assert(10 == json_object_get_int(jo1));
 	printf("%s\n", json_object_get_string(jo1));
@@ -312,6 +335,10 @@ static void test_wrong_inputs_set(void)
 
 	assert(0 != json_pointer_set(&jo1, "0", (jo2 = json_object_new_string("cod"))));
 	printf("PASSED - SET - failed with invalid array index'\n");
+	json_object_put(jo2);
+
+	assert(0 != json_pointer_set(&jo1, "/foo/", (jo2 = json_object_new_string("cod"))));
+	printf("PASSED - SET - failed with empty array index'\n");
 	json_object_put(jo2);
 
 	jo2 = json_object_new_string("whatever");

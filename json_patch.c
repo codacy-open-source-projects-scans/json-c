@@ -198,6 +198,7 @@ static int json_patch_apply_move_copy(struct json_object **res,
 	json_pointer_set_cb array_set_cb;
 	struct json_pointer_get_result from;
 	struct json_object *jfrom;
+	struct json_object *value;
 	const char *from_s;
 	size_t from_s_len;
 	int rc;
@@ -207,10 +208,24 @@ static int json_patch_apply_move_copy(struct json_object **res,
 		return -1;
 	}
 
-	from_s = json_object_get_string(jfrom);
+	from_s = json_object_get_type(jfrom) == json_type_string ? json_object_get_string(jfrom) : NULL;
+	if (from_s == NULL) {
+		_set_err(EINVAL, "Patch object 'from' field is not a string");
+		return -1;
+	}
 
 	from_s_len = strlen(from_s);
-	if (strncmp(from_s, path, from_s_len) == 0) {
+	/**
+	 * "from" is only a (possibly improper) prefix of "path" when the
+	 * shared run of characters ends on a reference-token boundary in
+	 * "path", i.e. the next character is '/' or the strings end there.
+	 * Without the boundary check, "from" being a plain string prefix of
+	 * "path" (e.g. "/aa" and "/aab") was mistaken for "from" being an
+	 * ancestor pointer of "path", rejecting moves/copies between mere
+	 * sibling keys that happen to share a name prefix.
+	 */
+	if (strncmp(from_s, path, from_s_len) == 0 &&
+	    (path[from_s_len] == '\0' || path[from_s_len] == '/')) {
 		/**
 		 * If lengths match, it's a noop, if they don't,
 		 * then we're trying to move a parent under a child
@@ -218,7 +233,7 @@ static int json_patch_apply_move_copy(struct json_object **res,
 		 *   The "from" location MUST NOT be a proper prefix of the "path"
 		 *   location; i.e., a location cannot be moved into one of its children.
 		 */
-		if (from_s_len == strlen(path))
+		if (path[from_s_len] == '\0')
 			return 0;
 		_set_err(EINVAL, "Invalid attempt to move parent under a child");
 		return -1;
@@ -233,24 +248,39 @@ static int json_patch_apply_move_copy(struct json_object **res,
 
 	// Note: it's impossible for json_pointer to find the root obj, due
 	// to the path check above, so from.parent is guaranteed non-NULL
-	json_object_get(from.obj);
 
 	if (!move) {
+		/* RFC 6902 section 4.5: "copy" duplicates the value, it does
+		 * not share it.  Sharing the source via a reference (as a plain
+		 * json_object_get() would) lets a later op insert the value
+		 * beneath itself through a different pointer path, which the
+		 * from/path string check above can't detect because both paths
+		 * resolve to the same object, producing a reference cycle that
+		 * loops forever on serialisation and breaks teardown.  An
+		 * independent deep copy can never alias an existing node. */
+		value = NULL;
+		if (from.obj != NULL &&
+		    json_object_deep_copy(from.obj, &value, NULL) < 0) {
+			_set_err(ENOMEM, "Unable to copy value referenced by 'from' field");
+			return -1;
+		}
 		array_set_cb = json_object_array_insert_idx_cb;
 	} else {
+		json_object_get(from.obj);
+		value = from.obj;
 		rc = __json_patch_apply_remove(&from);
 		if (rc < 0) {
-			json_object_put(from.obj);
+			json_object_put(value);
 			return rc;
 		}
 		array_set_cb = json_object_array_move_cb;
 	}
 
-	rc = json_pointer_set_with_cb(res, path, from.obj, array_set_cb, 0, &from);
+	rc = json_pointer_set_with_cb(res, path, value, array_set_cb, 0, &from);
 	if (rc)
 	{
 		_set_err(errno, "Failed to set value at path referenced by 'path' field");
-		json_object_put(from.obj);
+		json_object_put(value);
 	}
 
 	return rc;
@@ -303,12 +333,22 @@ int json_patch_apply(struct json_object *copy_from, struct json_object *patch,
 			_set_err(EINVAL, "Patch object does not contain 'op' field");
 			return -1;
 		}
-		op = json_object_get_string(jop);
+		op = json_object_get_type(jop) == json_type_string ? json_object_get_string(jop) : NULL;
+		if (op == NULL) {
+			_set_err(EINVAL, "Patch object 'op' field is not a string");
+			return -1;
+		}
 		if (!json_object_object_get_ex(patch_elem, "path", &jpath)) {
 			_set_err(EINVAL, "Patch object does not contain 'path' field");
 			return -1;
 		}
-		path = json_object_get_string(jpath); // Note: empty string is ok!
+		// Note: empty string is ok!
+		path = json_object_get_type(jpath) == json_type_string ? json_object_get_string(jpath)
+		                                                       : NULL;
+		if (path == NULL) {
+			_set_err(EINVAL, "Patch object 'path' field is not a string");
+			return -1;
+		}
 
 		if (!strcmp(op, "test"))
 			rc = json_patch_apply_test(base, patch_elem, path, patch_error);

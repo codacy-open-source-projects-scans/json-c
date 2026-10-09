@@ -1043,6 +1043,74 @@ struct json_object *json_tokener_parse_ex(struct json_tokener *tok, const char *
 				tok->st_pos = 0;
 				goto redo_char;
 			}
+			if (tok->flags & JSON_TOKENER_STRICT)
+			{
+				/* Check the accumulated text against the RFC 8259 grammar:
+				 *
+				 *   number = [ minus ] int [ frac ] [ exp ]
+				 *   int    = zero / ( digit1-9 *DIGIT )
+				 *   frac   = decimal-point 1*DIGIT
+				 *   exp    = e [ minus / plus ] 1*DIGIT
+				 *
+				 * so the integer part is mandatory and may not carry a
+				 * leading zero, and both the fraction and the exponent
+				 * need at least one digit of their own. That rejects
+				 * "01", ".5", "-.123", "1.", "2.e3" and "1e", while
+				 * "0", "-0", "0.5" and "2e3" stay valid.
+				 */
+				const char *num = tok->pb->buf;
+				if (*num == '-')
+					num++;
+				if (*num == '0')
+				{
+					num++;
+					if (*num >= '0' && *num <= '9')
+					{
+						tok->err = json_tokener_error_parse_number;
+						goto out;
+					}
+				}
+				else if (*num >= '1' && *num <= '9')
+				{
+					while (*num >= '0' && *num <= '9')
+						num++;
+				}
+				else
+				{
+					/* no integer part at all, e.g. ".5" or "-.123" */
+					tok->err = json_tokener_error_parse_number;
+					goto out;
+				}
+				if (*num == '.')
+				{
+					num++;
+					if (!(*num >= '0' && *num <= '9'))
+					{
+						tok->err = json_tokener_error_parse_number;
+						goto out;
+					}
+					while (*num >= '0' && *num <= '9')
+						num++;
+				}
+				if (*num == 'e' || *num == 'E')
+				{
+					num++;
+					if (*num == '+' || *num == '-')
+						num++;
+					if (!(*num >= '0' && *num <= '9'))
+					{
+						tok->err = json_tokener_error_parse_number;
+						goto out;
+					}
+					while (*num >= '0' && *num <= '9')
+						num++;
+				}
+				if (*num != '\0')
+				{
+					tok->err = json_tokener_error_parse_number;
+					goto out;
+				}
+			}
 			if (tok->is_double && !(tok->flags & JSON_TOKENER_STRICT))
 			{
 				/* Trim some chars off the end, to allow things
@@ -1087,15 +1155,9 @@ struct json_object *json_tokener_parse_ex(struct json_tokener *tok, const char *
 						tok->err = json_tokener_error_parse_number;
 						goto out;
 					}
-					if (numuint64 && tok->pb->buf[0] == '0' &&
-					    (tok->flags & JSON_TOKENER_STRICT))
-					{
-						tok->err = json_tokener_error_parse_number;
-						goto out;
-					}
 					if (numuint64 <= INT64_MAX)
 					{
-						num64 = (uint64_t)numuint64;
+						num64 = (int64_t)numuint64;
 						current = json_object_new_int64(num64);
 						if (current == NULL)
 						{

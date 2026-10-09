@@ -39,6 +39,7 @@
 
 static int formatted_output = JSON_C_TO_STRING_SPACED;
 static int show_output = 1;
+static int show_diag = 1;
 static int strict_mode = 0;
 static int validate_utf8 = 0;
 static int tokener_flags = 0;
@@ -56,6 +57,8 @@ static int showobj(struct json_object *new_obj);
 
 static void showmem(void)
 {
+	if (!show_diag)
+		return;
 #ifdef HAVE_GETRUSAGE
 	struct rusage rusage;
 	memset(&rusage, 0, sizeof(rusage));
@@ -111,12 +114,12 @@ static int parseit(int fd, int (*callback)(struct json_object *))
 			size_t parse_end = json_tokener_get_parse_end(tok);
 			if (obj == NULL && jerr != json_tokener_continue)
 			{
-				const char *aterr = (start_pos + parse_end < (int)sizeof(buf)) ?
+				const char *aterr = (start_pos + parse_end < retu) ?
 					&buf[start_pos + parse_end] : "";
 				fflush(stdout);
 				size_t fail_offset = total_read - retu + start_pos + parse_end;
-				fprintf(stderr, "Failed at offset %lu: %s %c\n", (unsigned long)fail_offset,
-				        json_tokener_error_desc(jerr), aterr[0]);
+				fprintf(stderr, "Failed at offset %lu: %s: char=0x%02x\n", (unsigned long)fail_offset,
+				        json_tokener_error_desc(jerr), (unsigned char)aterr[0]);
 				json_tokener_free(tok);
 				return 1;
 			}
@@ -137,6 +140,29 @@ static int parseit(int fd, int (*callback)(struct json_object *))
 	if (ret < 0)
 	{
 		fprintf(stderr, "error reading fd %d: %s\n", fd, strerror(errno));
+		json_tokener_free(tok);
+		return 1;
+	}
+	if (json_tokener_get_error(tok) == json_tokener_continue)
+	{
+		obj = json_tokener_parse_ex(tok, "", 1);
+		if (obj != NULL)
+		{
+			int cb_ret = callback(obj);
+			json_object_put(obj);
+			if (cb_ret != 0)
+			{
+				json_tokener_free(tok);
+				return 1;
+			}
+		}
+		if (json_tokener_get_error(tok) != json_tokener_success)
+		{
+			fprintf(stderr, "Failed at offset %lu: unexpected end of data\n",
+			        (unsigned long)total_read);
+			json_tokener_free(tok);
+			return 1;
+		}
 	}
 
 	json_tokener_free(tok);
@@ -171,10 +197,11 @@ static void usage(const char *argv0, int exitval, const char *errmsg)
 		fp = stderr;
 	if (errmsg != NULL)
 		fprintf(fp, "ERROR: %s\n\n", errmsg);
-	fprintf(fp, "Usage: %s [-f|-F <arg>] [-n] [-s] [-u] [filename]\n", argv0);
+	fprintf(fp, "Usage: %s [-f|-F <arg>] [-n] [-s] [-u] [-N] [filename]\n", argv0);
 	fprintf(fp, "  -f - Format the output to stdout with JSON_C_TO_STRING_PRETTY (default is JSON_C_TO_STRING_SPACED)\n");
 	fprintf(fp, "  -F - Format the output to stdout with <arg>, e.g. 0 for JSON_C_TO_STRING_PLAIN\n");
 	fprintf(fp, "  -n - No output\n");
+	fprintf(fp, "  -N - Omit diagnostic information, such as memory usage\n");
 	fprintf(fp, "  -c - Set JSON_C_TO_STRING_COLOR to colorize the output\n");
 	fprintf(fp, "  -P - Initialize tokener flags to the given value\n");
 	fprintf(fp, "  -s - Parse in strict mode, add flags:\n");
@@ -191,7 +218,7 @@ int main(int argc, char **argv)
 {
 	int opt;
 
-	while ((opt = getopt(argc, argv, "cfF:hnP:su")) != -1)
+	while ((opt = getopt(argc, argv, "cfF:hnNP:su")) != -1)
 	{
 		switch (opt)
 		{
@@ -199,6 +226,7 @@ int main(int argc, char **argv)
 		case 'f': formatted_output = JSON_C_TO_STRING_PRETTY; break;
 		case 'F': formatted_output = atoi(optarg); break;
 		case 'n': show_output = 0; break;
+		case 'N': show_diag = 0; break;
 		case 'P': tokener_flags = atoi(optarg); break;
 		case 's': strict_mode = 1; break;
 		case 'u': validate_utf8 = 1; break;
@@ -212,6 +240,11 @@ int main(int argc, char **argv)
 	{
 		fname = argv[optind];
 		fd = open(fname, O_RDONLY, 0);
+		if (fd < 0)
+		{
+			fprintf(stderr, "error opening %s: %s\n", fname, strerror(errno));
+			exit(EXIT_FAILURE);
+		}
 	}
 	showmem();
 	if (parseit(fd, showobj) != 0)

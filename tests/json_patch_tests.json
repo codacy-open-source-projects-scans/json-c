@@ -370,6 +370,16 @@
       "patch": [{"op": "move", "from": "/foo", "path": "/foo"}],
       "expected": {"foo": 1} },
 
+    { "comment": "Move between sibling keys sharing a name prefix is not a parent/child move",
+      "doc": {"aa": 1, "aab": 2},
+      "patch": [{"op": "move", "from": "/aa", "path": "/aab"}],
+      "expected": {"aab": 1} },
+
+    { "comment": "Copy between sibling keys sharing a name prefix is not a parent/child move",
+      "doc": {"aa": 1, "aab": 2},
+      "patch": [{"op": "copy", "from": "/aa", "path": "/aab"}],
+      "expected": {"aa": 1, "aab": 1} },
+
     { "doc": {"foo": 1, "baz": [{"qux": "hello"}]},
       "patch": [{"op": "move", "from": "/foo", "path": "/bar"}],
       "expected": {"baz": [{"qux": "hello"}], "bar": 1} },
@@ -535,6 +545,31 @@
        "doc": {"foo":"bar"},
        "patch": [{"op": "add", "path": "/FOO", "value": "BAR"}],
        "expected": {"foo": "bar", "FOO": "BAR"}
+    },
+
+    { "comment": "copy must duplicate the value, not alias it, so no cycle can form",
+       "doc": {"a": {"p": {}}},
+       "patch": [{"op": "copy", "from": "/a", "path": "/b"},
+                 {"op": "copy", "from": "/b", "path": "/a/p/x"}],
+       "expected": {"a": {"p": {"x": {"p": {}}}}, "b": {"p": {}}}
+    },
+
+    { "comment": "null op field must be rejected, not dereferenced",
+       "doc": {"foo": "bar"},
+       "patch": [{"op": null, "path": "/foo"}],
+       "error": "a null op field should fail rather than crash"
+    },
+
+    { "comment": "null from field must be rejected, not dereferenced",
+       "doc": {"foo": "bar"},
+       "patch": [{"op": "move", "from": null, "path": "/foo"}],
+       "error": "a null from field should fail rather than crash"
+    },
+
+    { "comment": "null path field must be rejected, not dereferenced",
+       "doc": {"foo": "bar"},
+       "patch": [{"op": "remove", "path": null}],
+       "error": "a null path field should fail rather than crash"
     }
 
 ]
